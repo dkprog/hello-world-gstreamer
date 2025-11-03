@@ -3,10 +3,35 @@ import sys
 gi.require_version("Gst", "1.0")  # noqa
 from gi.repository import Gst, GLib  # type: ignore
 
+MAIN_VIDEO_SIZE = (640, 480)
+PIP_VIDEO_SIZE = (320, 240)
+PIP_VIDEO_POSITION = (0, MAIN_VIDEO_SIZE[1]-PIP_VIDEO_SIZE[1])
+
 
 def create_elements(pipeline: Gst.Pipeline) -> None:
-    src = Gst.ElementFactory.make("videotestsrc", "src")
-    pipeline.add(src)
+    main_src = Gst.ElementFactory.make("videotestsrc", "main_src")
+    pipeline.add(main_src)
+
+    main_src_capsfilter = Gst.ElementFactory.make(
+        "capsfilter", "main_src_capsfilter")
+    width, height = MAIN_VIDEO_SIZE
+    caps = Gst.Caps.from_string(f"video/x-raw, width={width}, height={height}")
+    main_src_capsfilter.set_property("caps", caps)
+    pipeline.add(main_src_capsfilter)
+
+    compositor = Gst.ElementFactory.make("compositor", "compositor")
+    pipeline.add(compositor)
+
+    pip_src = Gst.ElementFactory.make("videotestsrc", "pip_src")
+    pip_src.set_property("pattern", "ball")
+    pipeline.add(pip_src)
+
+    pip_src_capsfilter = Gst.ElementFactory.make(
+        "capsfilter", "pip_src_capsfilter")
+    width, height = PIP_VIDEO_SIZE
+    caps = Gst.Caps.from_string(f"video/x-raw, width={width}, height={height}")
+    pip_src_capsfilter.set_property("caps", caps)
+    pipeline.add(pip_src_capsfilter)
 
     videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert")
     pipeline.add(videoconvert)
@@ -16,12 +41,25 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
 
 
 def link_elements(pipeline: Gst.Pipeline) -> None:
-    src = pipeline.get_by_name("src")
+    main_src = pipeline.get_by_name("main_src")
+    main_src_capsfilter = pipeline.get_by_name("main_src_capsfilter")
+    compositor = pipeline.get_by_name("compositor")
     videoconvert = pipeline.get_by_name("videoconvert")
     sink = pipeline.get_by_name("sink")
+    pip_src = pipeline.get_by_name("pip_src")
+    pip_src_capsfilter = pipeline.get_by_name("pip_src_capsfilter")
 
-    src.link(videoconvert)
+    main_src.link(main_src_capsfilter)
+    main_src_capsfilter.link(compositor)
+    compositor.link(videoconvert)
     videoconvert.link(sink)
+    pip_src.link(pip_src_capsfilter)
+    pip_src_capsfilter.link(compositor)
+
+    compositor_sink_1 = compositor.get_static_pad("sink_1")
+    xpos, ypos = PIP_VIDEO_POSITION
+    compositor_sink_1.set_property("xpos", xpos)
+    compositor_sink_1.set_property("ypos", ypos)
 
 
 def create_pipeline() -> Gst.Pipeline:
@@ -60,7 +98,7 @@ def observe_events(pipeline: Gst.Pipeline, loop: GLib.MainLoop) -> None:
 
 
 def stop_pipeline(pipeline: Gst.Pipeline):
-    print("Sending EOS...")
+    print("Sending EOS event...")
 
     bus = pipeline.get_bus()
     eos = Gst.Event.new_eos()
