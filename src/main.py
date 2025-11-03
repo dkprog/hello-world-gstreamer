@@ -7,6 +7,7 @@ MAIN_VIDEO_SIZE = (640, 480)
 PIP_VIDEO_SIZE = (320, 240)
 PIP_VIDEO_DEVICE = "/dev/video0"
 PIP_VIDEO_POSITION = (0, MAIN_VIDEO_SIZE[1]-PIP_VIDEO_SIZE[1])
+OUTPUT_FPS = (10, 1)
 
 
 def create_elements(pipeline: Gst.Pipeline) -> None:
@@ -37,6 +38,13 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert")
     pipeline.add(videoconvert)
 
+    output_capsfilter = Gst.ElementFactory.make(
+        "capsfilter", "output_capsfilter")
+    fps_n, fps_d = OUTPUT_FPS
+    caps = Gst.Caps.from_string(f"video/x-raw, framerate={fps_n}/{fps_d}")
+    output_capsfilter.set_property("caps", caps)
+    pipeline.add(output_capsfilter)
+
     sink = Gst.ElementFactory.make("autovideosink", "sink")
     pipeline.add(sink)
 
@@ -46,6 +54,7 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     main_src_capsfilter = pipeline.get_by_name("main_src_capsfilter")
     compositor = pipeline.get_by_name("compositor")
     videoconvert = pipeline.get_by_name("videoconvert")
+    output_capsfilter = pipeline.get_by_name("output_capsfilter")
     sink = pipeline.get_by_name("sink")
     pip_src = pipeline.get_by_name("pip_src")
     pip_src_capsfilter = pipeline.get_by_name("pip_src_capsfilter")
@@ -53,7 +62,8 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     main_src.link(main_src_capsfilter)
     main_src_capsfilter.link(compositor)
     compositor.link(videoconvert)
-    videoconvert.link(sink)
+    videoconvert.link(output_capsfilter)
+    output_capsfilter.link(sink)
     pip_src.link(pip_src_capsfilter)
     pip_src_capsfilter.link(compositor)
 
