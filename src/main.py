@@ -5,6 +5,7 @@ from gi.repository import Gst, GLib  # type: ignore
 
 MAIN_VIDEO_SIZE = (640, 480)
 PIP_VIDEO_SIZE = (320, 240)
+PIP_VIDEO_DEVICE = "/dev/video0"
 PIP_VIDEO_POSITION = (0, MAIN_VIDEO_SIZE[1]-PIP_VIDEO_SIZE[1])
 
 
@@ -22,8 +23,8 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     compositor = Gst.ElementFactory.make("compositor", "compositor")
     pipeline.add(compositor)
 
-    pip_src = Gst.ElementFactory.make("videotestsrc", "pip_src")
-    pip_src.set_property("pattern", "ball")
+    pip_src = Gst.ElementFactory.make("v4l2src", "pip_src")
+    pip_src.set_property("device", PIP_VIDEO_DEVICE)
     pipeline.add(pip_src)
 
     pip_src_capsfilter = Gst.ElementFactory.make(
