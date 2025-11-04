@@ -45,6 +45,18 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     output_capsfilter.set_property("caps", caps)
     pipeline.add(output_capsfilter)
 
+    tee = Gst.ElementFactory.make("tee", "tee")
+    pipeline.add(tee)
+
+    queue_display = Gst.ElementFactory.make("queue", "queue_display")
+    pipeline.add(queue_display)
+
+    sink_display = Gst.ElementFactory.make("autovideosink", "sink_display")
+    pipeline.add(sink_display)
+
+    queue_filesink = Gst.ElementFactory.make("queue", "queue_filesink")
+    pipeline.add(queue_filesink)
+
     gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
     gifenc.set_property("repeat", -1)   # loop forever
     gifenc.set_property("speed", fps_n)
@@ -61,6 +73,10 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     compositor = pipeline.get_by_name("compositor")
     videoconvert = pipeline.get_by_name("videoconvert")
     output_capsfilter = pipeline.get_by_name("output_capsfilter")
+    tee = pipeline.get_by_name("tee")
+    queue_display = pipeline.get_by_name("queue_display")
+    sink_display = pipeline.get_by_name("sink_display")
+    queue_filesink = pipeline.get_by_name("queue_filesink")
     gifenc = pipeline.get_by_name("gifenc")
     sink = pipeline.get_by_name("sink")
     pip_src = pipeline.get_by_name("pip_src")
@@ -70,8 +86,13 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     main_src_capsfilter.link(compositor)
     compositor.link(videoconvert)
     videoconvert.link(output_capsfilter)
-    output_capsfilter.link(gifenc)
+    output_capsfilter.link(tee)
+    tee.link(queue_display)
+    queue_display.link(sink_display)
+    tee.link(queue_filesink)
+    queue_filesink.link(gifenc)
     gifenc.link(sink)
+
     pip_src.link(pip_src_capsfilter)
     pip_src_capsfilter.link(compositor)
 
