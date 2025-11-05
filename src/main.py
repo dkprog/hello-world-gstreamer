@@ -1,5 +1,6 @@
 import gi  # type: ignore
 import sys
+import time
 gi.require_version("Gst", "1.0")  # noqa
 from gi.repository import Gst, GLib  # type: ignore
 
@@ -8,6 +9,7 @@ PIP_VIDEO_SIZE = (320, 240)
 PIP_VIDEO_DEVICE = "/dev/video0"
 PIP_VIDEO_POSITION = (0, MAIN_VIDEO_SIZE[1]-PIP_VIDEO_SIZE[1])
 OUTPUT_FPS = (10, 1)
+GIF_DURATION_SECONDS = 5
 
 
 def create_elements(pipeline: Gst.Pipeline) -> None:
@@ -49,12 +51,19 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     pipeline.add(tee)
 
     queue_display = Gst.ElementFactory.make("queue", "queue_display")
+    queue_display.set_property("leaky", "downstream")
     pipeline.add(queue_display)
 
     sink_display = Gst.ElementFactory.make("autovideosink", "sink_display")
     pipeline.add(sink_display)
 
+    valve = Gst.ElementFactory.make("valve", "valve")
+    valve.set_property("drop", False)
+    valve.set_property("drop-mode", "transform-to-gap")
+    pipeline.add(valve)
+
     queue_filesink = Gst.ElementFactory.make("queue", "queue_filesink")
+    queue_filesink.set_property("leaky", "downstream")
     pipeline.add(queue_filesink)
 
     gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
@@ -62,8 +71,8 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     gifenc.set_property("speed", fps_n)
     pipeline.add(gifenc)
 
-    sink = Gst.ElementFactory.make("filesink", "sink")
-    sink.set_property("location", "image.gif")
+    sink = Gst.ElementFactory.make("fakesink", "sink")
+    # sink.set_property("location", "image.gif")
     pipeline.add(sink)
 
 
@@ -76,6 +85,7 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     tee = pipeline.get_by_name("tee")
     queue_display = pipeline.get_by_name("queue_display")
     sink_display = pipeline.get_by_name("sink_display")
+    valve = pipeline.get_by_name("valve")
     queue_filesink = pipeline.get_by_name("queue_filesink")
     gifenc = pipeline.get_by_name("gifenc")
     sink = pipeline.get_by_name("sink")
@@ -89,7 +99,8 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     output_capsfilter.link(tee)
     tee.link(queue_display)
     queue_display.link(sink_display)
-    tee.link(queue_filesink)
+    tee.link(valve)
+    valve.link(queue_filesink)
     queue_filesink.link(gifenc)
     gifenc.link(sink)
 
@@ -124,10 +135,9 @@ def observe_events(pipeline: Gst.Pipeline, loop: GLib.MainLoop) -> None:
                 old, new, pending = message.parse_state_changed()
                 print(
                     f"Pipeline state {old.value_nick.upper()} => {new.value_nick.upper()}")
-                if new == Gst.State.PLAYING:
-                    # when GST_DEBUG_DUMP_DOT_DIR is set, create pipeline.dot
-                    Gst.debug_bin_to_dot_file(
-                        pipeline, Gst.DebugGraphDetails.ALL, "pipeline")
+                # when GST_DEBUG_DUMP_DOT_DIR is set, create pipeline dot file
+                Gst.debug_bin_to_dot_file(
+                    pipeline, Gst.DebugGraphDetails.ALL, f"pipeline.{new.value_nick}")
         elif message.type == Gst.MessageType.ERROR:
             err, dbg = message.parse_error()
             print("Error:", err, dbg)
@@ -135,6 +145,25 @@ def observe_events(pipeline: Gst.Pipeline, loop: GLib.MainLoop) -> None:
         elif message.type == Gst.MessageType.EOS:
             print("Got EOS.")
             loop.quit()
+
+    bus.connect("message", on_message, pipeline)
+
+
+def toggle_valve(valve: Gst.Element) -> None:
+    current_value = valve.get_property("drop")
+    valve.set_property("drop", not current_value)
+    print("valve now", "closed" if valve.get_property("drop") else "open")
+
+
+def configure_timers(pipeline: Gst.Pipeline) -> None:
+    valve = pipeline.get_by_name("valve")
+
+    def on_interval():
+        toggle_valve(valve)
+        return True
+
+    duration_ms = GIF_DURATION_SECONDS * 1000
+    GLib.timeout_add(duration_ms, on_interval)
 
 
 def stop_pipeline(pipeline: Gst.Pipeline):
@@ -165,6 +194,7 @@ if __name__ == '__main__':
     pipeline = create_pipeline()
     observe_events(pipeline=pipeline, loop=loop)
     play_pipeline(pipeline=pipeline)
+    configure_timers(pipeline=pipeline)
 
     try:
         loop.run()
