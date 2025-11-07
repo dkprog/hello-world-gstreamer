@@ -12,40 +12,6 @@ OUTPUT_FPS = (10, 1)
 GIF_DURATION_SECONDS = 5
 
 
-def create_record_bin() -> Gst.Bin:
-    record_bin = Gst.Bin.new("record_bin")
-
-    valve = Gst.ElementFactory.make("valve", "valve")
-    valve.set_property("drop", False)
-    valve.set_property("drop-mode", "transform-to-gap")
-    record_bin.add(valve)
-
-    queue_filesink = Gst.ElementFactory.make("queue", "queue_filesink")
-    queue_filesink.set_property("leaky", "downstream")
-    record_bin.add(queue_filesink)
-
-    gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
-    gifenc.set_property("repeat", -1)   # loop forever
-    fps_n, _ = OUTPUT_FPS
-    gifenc.set_property("speed", fps_n)
-    record_bin.add(gifenc)
-
-    sink = Gst.ElementFactory.make("fakesink", "sink")
-    # sink.set_property("location", "image.gif")
-    record_bin.add(sink)
-
-    valve.link(queue_filesink)
-    queue_filesink.link(gifenc)
-    gifenc.link(sink)
-
-    sinkpad = valve.get_static_pad("sink")
-    ghostpad = Gst.GhostPad.new("sink", sinkpad)
-    ghostpad.set_active(True)
-    record_bin.add_pad(ghostpad)
-
-    return record_bin
-
-
 def create_elements(pipeline: Gst.Pipeline) -> None:
     main_src = Gst.ElementFactory.make("videotestsrc", "main_src")
     pipeline.add(main_src)
@@ -91,8 +57,23 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     sink_display = Gst.ElementFactory.make("autovideosink", "sink_display")
     pipeline.add(sink_display)
 
-    record_bin = create_record_bin()
-    pipeline.add(record_bin)
+    valve = Gst.ElementFactory.make("valve", "valve")
+    valve.set_property("drop", False)
+    valve.set_property("drop-mode", "transform-to-gap")
+    pipeline.add(valve)
+
+    queue_filesink = Gst.ElementFactory.make("queue", "queue_filesink")
+    queue_filesink.set_property("leaky", "downstream")
+    pipeline.add(queue_filesink)
+
+    gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
+    gifenc.set_property("repeat", -1)   # loop forever
+    gifenc.set_property("speed", fps_n)
+    pipeline.add(gifenc)
+
+    sink = Gst.ElementFactory.make("fakesink", "sink")
+    # sink.set_property("location", "image.gif")
+    pipeline.add(sink)
 
 
 def link_elements(pipeline: Gst.Pipeline) -> None:
@@ -104,7 +85,10 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     tee = pipeline.get_by_name("tee")
     queue_display = pipeline.get_by_name("queue_display")
     sink_display = pipeline.get_by_name("sink_display")
-    record_bin = pipeline.get_by_name("record_bin")
+    valve = pipeline.get_by_name("valve")
+    queue_filesink = pipeline.get_by_name("queue_filesink")
+    gifenc = pipeline.get_by_name("gifenc")
+    sink = pipeline.get_by_name("sink")
     pip_src = pipeline.get_by_name("pip_src")
     pip_src_capsfilter = pipeline.get_by_name("pip_src_capsfilter")
 
@@ -115,7 +99,10 @@ def link_elements(pipeline: Gst.Pipeline) -> None:
     output_capsfilter.link(tee)
     tee.link(queue_display)
     queue_display.link(sink_display)
-    tee.link(record_bin)
+    tee.link(valve)
+    valve.link(queue_filesink)
+    queue_filesink.link(gifenc)
+    gifenc.link(sink)
 
     pip_src.link(pip_src_capsfilter)
     pip_src_capsfilter.link(compositor)
@@ -169,8 +156,7 @@ def toggle_valve(valve: Gst.Element) -> None:
 
 
 def configure_timers(pipeline: Gst.Pipeline) -> None:
-    record_bin = pipeline.get_by_name("record_bin")
-    valve = record_bin.get_by_name("valve")
+    valve = pipeline.get_by_name("valve")
 
     def on_interval():
         toggle_valve(valve)
