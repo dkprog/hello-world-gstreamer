@@ -19,15 +19,59 @@ def get_gif_file_name() -> str:
     return filename
 
 
-def create_elements(pipeline: Gst.Pipeline) -> None:
-    main_src = Gst.ElementFactory.make("videotestsrc", "main_src")
-    pipeline.add(main_src)
-
+def create_main_src_caps_filter() -> Gst.Element:
     main_src_capsfilter = Gst.ElementFactory.make(
         "capsfilter", "main_src_capsfilter")
     width, height = MAIN_VIDEO_SIZE
     caps = Gst.Caps.from_string(f"video/x-raw, width={width}, height={height}")
     main_src_capsfilter.set_property("caps", caps)
+    return main_src_capsfilter
+
+
+def create_pip_src_capsfilter() -> Gst.Element:
+    pip_src_capsfilter = Gst.ElementFactory.make(
+        "capsfilter", "pip_src_capsfilter")
+    width, height = PIP_VIDEO_SIZE
+    caps = Gst.Caps.from_string(f"video/x-raw, width={width}, height={height}")
+    pip_src_capsfilter.set_property("caps", caps)
+    return pip_src_capsfilter
+
+
+def create_output_capsfilter() -> Gst.Element:
+    output_capsfilter = Gst.ElementFactory.make(
+        "capsfilter", "output_capsfilter")
+    fps_n, fps_d = OUTPUT_FPS
+    caps = Gst.Caps.from_string(f"video/x-raw, framerate={fps_n}/{fps_d}")
+    output_capsfilter.set_property("caps", caps)
+    return output_capsfilter
+
+
+def create_valve() -> Gst.Element:
+    valve = Gst.ElementFactory.make("valve", "valve")
+    valve.set_property("drop", False)
+    valve.set_property("drop-mode", "transform-to-gap")
+    return valve
+
+
+def create_gifenc() -> Gst.Element:
+    gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
+    gifenc.set_property("repeat", -1)   # loop forever
+    fps_n, _ = OUTPUT_FPS
+    gifenc.set_property("speed", fps_n)
+    return gifenc
+
+
+def create_sink() -> Gst.Element:
+    sink = Gst.ElementFactory.make("filesink", "sink")
+    sink.set_property("location", get_gif_file_name())
+    return sink
+
+
+def create_elements(pipeline: Gst.Pipeline) -> None:
+    main_src = Gst.ElementFactory.make("videotestsrc", "main_src")
+    pipeline.add(main_src)
+
+    main_src_capsfilter = create_main_src_caps_filter()
     pipeline.add(main_src_capsfilter)
 
     compositor = Gst.ElementFactory.make("compositor", "compositor")
@@ -37,21 +81,13 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     pip_src.set_property("device", PIP_VIDEO_DEVICE)
     pipeline.add(pip_src)
 
-    pip_src_capsfilter = Gst.ElementFactory.make(
-        "capsfilter", "pip_src_capsfilter")
-    width, height = PIP_VIDEO_SIZE
-    caps = Gst.Caps.from_string(f"video/x-raw, width={width}, height={height}")
-    pip_src_capsfilter.set_property("caps", caps)
+    pip_src_capsfilter = create_pip_src_capsfilter()
     pipeline.add(pip_src_capsfilter)
 
     videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert")
     pipeline.add(videoconvert)
 
-    output_capsfilter = Gst.ElementFactory.make(
-        "capsfilter", "output_capsfilter")
-    fps_n, fps_d = OUTPUT_FPS
-    caps = Gst.Caps.from_string(f"video/x-raw, framerate={fps_n}/{fps_d}")
-    output_capsfilter.set_property("caps", caps)
+    output_capsfilter = create_output_capsfilter()
     pipeline.add(output_capsfilter)
 
     tee = Gst.ElementFactory.make("tee", "tee")
@@ -64,22 +100,17 @@ def create_elements(pipeline: Gst.Pipeline) -> None:
     sink_display = Gst.ElementFactory.make("autovideosink", "sink_display")
     pipeline.add(sink_display)
 
-    valve = Gst.ElementFactory.make("valve", "valve")
-    valve.set_property("drop", False)
-    valve.set_property("drop-mode", "transform-to-gap")
+    valve = create_valve()
     pipeline.add(valve)
 
     queue_filesink = Gst.ElementFactory.make("queue", "queue_filesink")
     queue_filesink.set_property("leaky", "downstream")
     pipeline.add(queue_filesink)
 
-    gifenc = Gst.ElementFactory.make("gifenc", "gifenc")
-    gifenc.set_property("repeat", -1)   # loop forever
-    gifenc.set_property("speed", fps_n)
+    gifenc = create_gifenc()
     pipeline.add(gifenc)
 
-    sink = Gst.ElementFactory.make("filesink", "sink")
-    sink.set_property("location", get_gif_file_name())
+    sink = create_sink()
     pipeline.add(sink)
 
 
