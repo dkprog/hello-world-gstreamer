@@ -4,11 +4,11 @@ import datetime
 gi.require_version("Gst", "1.0")  # noqa
 from gi.repository import Gst, GLib  # type: ignore
 
-MAIN_VIDEO_SIZE = (640, 480)
-PIP_VIDEO_SIZE = (320, 240)
+MAIN_VIDEO_SIZE = (320, 240)
+PIP_VIDEO_SIZE = (160, 120)
 PIP_VIDEO_DEVICE = "/dev/video0"
 PIP_VIDEO_POSITION = (0, MAIN_VIDEO_SIZE[1]-PIP_VIDEO_SIZE[1])
-OUTPUT_FPS = (10, 1)
+OUTPUT_FPS = (5, 1)
 GIF_DURATION_SECONDS = 5
 
 
